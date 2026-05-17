@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="theme-color" content="#0a0a0f"/>
+<meta name="apple-mobile-web-app-capable" content="yes"/>
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="VaultWise"/>
+<meta name="description" content="Track investments across Nigeria, UK and US"/>
+<title>VaultWise</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+
+<!-- PWA manifest inline -->
+<script>
+const manifest = {
+  name: "VaultWise",
+  short_name: "VaultWise",
+  description: "Multi-market investment tracker",
+  start_url: "./",
+  display: "standalone",
+  background_color: "#0a0a0f",
+  theme_color: "#0a0a0f",
+  orientation: "portrait-primary",
+  icons: [
+    { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 192 192'%3E%3Crect width='192' height='192' rx='40' fill='%230a0a0f'/%3E%3Ctext x='96' y='130' font-size='110' text-anchor='middle'%3E◈%3C/text%3E%3C/svg%3E", sizes: "192x192", type: "image/svg+xml" },
+    { src: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='100' fill='%230a0a0f'/%3E%3Ctext x='256' y='360' font-size='300' text-anchor='middle'%3E◈%3C/text%3E%3C/svg%3E", sizes: "512x512", type: "image/svg+xml" }
+  ]
+};
+const blob = new Blob([JSON.stringify(manifest)], {type:'application/json'});
+const url = URL.createObjectURL(blob);
+const link = document.createElement('link');
+link.rel = 'manifest'; link.href = url;
+document.head.appendChild(link);
+</script>
+
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;margin:0;padding:0}
+html,body{height:100%;background:#0a0a0f;color:#fff;font-family:'DM Sans',sans-serif}
+#root{min-height:100vh}
+@keyframes fadeUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+@keyframes slideUp{from{opacity:0;transform:translateY(40px)}to{opacity:1;transform:none}}
+@keyframes toastIn{from{opacity:0;transform:translateX(40px)}to{opacity:1;transform:none}}
+.fadeUp{animation:fadeUp .28s ease}
+input,select,textarea{-webkit-appearance:none;appearance:none;font-family:'DM Sans',sans-serif}
+input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.6)}
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-thumb{background:#333;border-radius:4px}
+.carousel::-webkit-scrollbar{height:0}
+.dd-item:hover{background:#1a1a2e!important}
+.nav-btn:hover{background:#111}
+.country-card:hover{border-color:#333!important}
+button{cursor:pointer;font-family:'DM Sans',sans-serif}
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+<script type="text/babel">
+const {useState,useEffect,useRef,useCallback}=React;
+
+/* ── Constants ── */
+const CURR={NGN:"₦",GBP:"£",USD:"$"};
+const FX={NGN_GBP:2050,NGN_USD:1600,GBP_USD:1.28};
+const AUTO_TYPES=["savings","fixed_deposit","p2p","bonds","money_market"];
+
+const TYPES=[
+  {value:"savings",      label:"Bank Savings",   icon:"🏦"},
+  {value:"fixed_deposit",label:"Fixed Deposit",  icon:"🔒"},
+  {value:"p2p",          label:"P2P Lending",    icon:"🤝"},
+  {value:"equity",       label:"Equity/Stocks",  icon:"📈"},
+  {value:"isa",          label:"ISA (UK)",        icon:"🛡️"},
+  {value:"401k",         label:"401k/IRA (US)",  icon:"🏛️"},
+  {value:"bonds",        label:"Bonds/Gilts",    icon:"📜"},
+  {value:"etf",          label:"ETF",             icon:"🌐"},
+  {value:"money_market", label:"Money Market",   icon:"💵"},
+];
+
+const TC={savings:"#4ade80",fixed_deposit:"#facc15",p2p:"#fb923c",equity:"#60a5fa",isa:"#a78bfa","401k":"#f87171",bonds:"#f472b6",etf:"#34d399",money_market:"#94a3b8"};
+
+const AUTO_DESC={
+  savings:"Daily simple interest — your bank credits interest on your balance each day at the stated rate.",
+  fixed_deposit:"Simple interest locked at your rate for the full tenor, calculated from start date to maturity.",
+  p2p:"Daily simple interest accruing on your lent principal at the agreed annual rate.",
+  bonds:"Fixed coupon accruing daily. For NS&I Premium Bonds, returns are prize-based — consider entering manually.",
+  money_market:"Daily simple interest on your money market balance at the fund's current rate.",
+};
+
+const COUNTRIES=[
+  {value:"NG",label:"Nigeria",       flag:"🇳🇬",currency:"NGN",accent:"#4ade80"},
+  {value:"UK",label:"United Kingdom",flag:"🇬🇧",currency:"GBP",accent:"#60a5fa"},
+  {value:"US",label:"United States", flag:"🇺🇸",currency:"USD",accent:"#f87171"},
+];
+
+const PLATFORMS={
+  NG:["GTBank","Access Bank","Zenith Bank","UBA","First Bank","Stanbic IBTC","Lendha","Fairmoney","Carbon","Meristem","Cowrywise","Bamboo","Risevest"],
+  UK:["Barclays","Lloyds","HSBC","NatWest","Monzo","Starling","Hargreaves Lansdown","NS&I","Vanguard UK","Trading 212","Freetrade"],
+  US:["Chase","Bank of America","Wells Fargo","Ally Bank","Marcus","Fidelity","Vanguard","Schwab","Robinhood","Wealthfront","Betterment","E*TRADE"],
+};
+
+const SEED=[
+  {id:1,name:"GTBank Savings",      type:"savings",      country:"NG",currency:"NGN",principal:2500000,currentValue:2625000,interestRate:5,   platform:"GTBank",             startDate:"2024-01-15",maturityDate:"",        notes:"",autoCalc:true},
+  {id:2,name:"Access FD 90-Day",    type:"fixed_deposit",country:"NG",currency:"NGN",principal:5000000,currentValue:5312500,interestRate:25,  platform:"Access Bank",        startDate:"2024-11-01",maturityDate:"2025-11-01",notes:"Auto-renew",autoCalc:true},
+  {id:3,name:"Lendha P2P",          type:"p2p",          country:"NG",currency:"NGN",principal:1000000,currentValue:1085000,interestRate:34,  platform:"Lendha",             startDate:"2024-10-01",maturityDate:"2025-12-30",notes:"",autoCalc:true},
+  {id:4,name:"Dangote Cement NGX",  type:"equity",       country:"NG",currency:"NGN",principal:3000000,currentValue:3780000,interestRate:0,   platform:"Meristem",           startDate:"2024-03-10",maturityDate:"",        notes:"",autoCalc:false},
+  {id:5,name:"Barclays Easy Access",type:"savings",      country:"UK",currency:"GBP",principal:8000,   currentValue:8380,   interestRate:4.75,platform:"Barclays",           startDate:"2024-06-01",maturityDate:"",        notes:"",autoCalc:true},
+  {id:6,name:"HL ISA",              type:"isa",          country:"UK",currency:"GBP",principal:15000,  currentValue:16950,  interestRate:0,   platform:"Hargreaves Lansdown",startDate:"2024-04-06",maturityDate:"",        notes:"FTSE All-World ETF",autoCalc:false},
+  {id:7,name:"NS&I Premium Bonds",  type:"bonds",        country:"UK",currency:"GBP",principal:5000,   currentValue:5000,   interestRate:4.4, platform:"NS&I",               startDate:"2023-09-01",maturityDate:"",        notes:"",autoCalc:false},
+  {id:8,name:"Ally HYSA",           type:"savings",      country:"US",currency:"USD",principal:10000,  currentValue:10475,  interestRate:4.75,platform:"Ally Bank",          startDate:"2024-03-01",maturityDate:"",        notes:"High-yield savings",autoCalc:true},
+  {id:9,name:"Fidelity S&P 500 ETF",type:"etf",          country:"US",currency:"USD",principal:5000,   currentValue:6200,   interestRate:0,   platform:"Fidelity",           startDate:"2023-06-01",maturityDate:"",        notes:"FXAIX",autoCalc:false},
+];
+
+const BLANK={name:"",type:"savings",country:"NG",currency:"NGN",principal:"",currentValue:"",interestRate:"",platform:"",startDate:"",maturityDate:"",notes:"",autoCalc:true};
+const LS_KEY="vaultwise_v1";
+
+/* ── Helpers ── */
+const toNGN=(v,c)=>c==="NGN"?v:c==="GBP"?v*FX.NGN_GBP:v*FX.NGN_USD;
+const toUSD=(v,c)=>c==="USD"?v:c==="NGN"?v/FX.NGN_USD:v*FX.GBP_USD;
+const toGBP=(v,c)=>c==="GBP"?v:c==="NGN"?v/FX.NGN_GBP:v/FX.GBP_USD;
+
+function fmt(value,currency){
+  const s=CURR[currency]||"",n=Number(value)||0;
+  if(n>=1e6)return`${s}${(n/1e6).toFixed(2)}M`;
+  if(n>=1e3)return`${s}${(n/1e3).toFixed(1)}K`;
+  return`${s}${n.toFixed(2)}`;
+}
+
+function computeAuto(inv){
+  if(!inv.autoCalc||!AUTO_TYPES.includes(inv.type)||!inv.interestRate||!inv.startDate)return null;
+  const start=new Date(inv.startDate),now=new Date();
+  const end=inv.maturityDate?new Date(Math.min(now,new Date(inv.maturityDate))):now;
+  const days=Math.max(0,(end-start)/86400000);
+  return inv.principal*(1+(inv.interestRate/100)*(days/365));
+}
+
+const effVal=inv=>{const a=computeAuto(inv);return a!==null?a:inv.currentValue;};
+const calcRet=inv=>{const cv=effVal(inv);return inv.principal>0?((cv-inv.principal)/inv.principal)*100:0;};
+const daysLeft=d=>d?Math.ceil((new Date(d)-new Date())/86400000):null;
+const daysSince=d=>d?Math.floor((new Date()-new Date(d))/86400000):0;
+
+function useWidth(){
+  const [w,setW]=useState(window.innerWidth);
+  useEffect(()=>{const h=()=>setW(window.innerWidth);window.addEventListener("resize",h);return()=>window.removeEventListener("resize",h)},[]);
+  return w;
+}
+
+/* ════════════════════ APP ════════════════════ */
+function App(){
+  const [investments,setInvestments]=useState(()=>{
+    try{const s=localStorage.getItem(LS_KEY);return s?JSON.parse(s):SEED;}
+    catch{return SEED;}
+  });
+  const [tab,setTab]=useState("dashboard");
+  const [cf,setCf]=useState("ALL");
+  const [modal,setModal]=useState(false);
+  const [editTarget,setEditTarget]=useState(null);
+  const [form,setForm]=useState(BLANK);
+  const [showExport,setShowExport]=useState(false);
+  const [showImport,setShowImport]=useState(false);
+  const [importTxt,setImportTxt]=useState("");
+  const [toast,setToast]=useState(null);
+  const w=useWidth();
+  const mob=w<640;
+
+  /* Save to localStorage whenever investments change */
+  useEffect(()=>{
+    try{localStorage.setItem(LS_KEY,JSON.stringify(investments));}
+    catch(e){console.warn("Storage full",e);}
+  },[investments]);
+
+  const allPlatforms=c=>{
+    const fromInv=investments.filter(i=>i.country===c).map(i=>i.platform).filter(Boolean);
+    return[...new Set([...fromInv,...(PLATFORMS[c]||[])])].sort();
+  };
+
+  function notify(msg,type="ok"){setToast({msg,type});setTimeout(()=>setToast(null),2600);}
+
+  /* Derived */
+  const ngInv=investments.filter(i=>i.country==="NG");
+  const ukInv=investments.filter(i=>i.country==="UK");
+  const usInv=investments.filter(i=>i.country==="US");
+  const totalNGN=investments.reduce((s,i)=>s+toNGN(effVal(i),i.currency),0);
+  const totalUSD=investments.reduce((s,i)=>s+toUSD(effVal(i),i.currency),0);
+  const prinNGN=investments.reduce((s,i)=>s+toNGN(i.principal,i.currency),0);
+  const prinUSD=investments.reduce((s,i)=>s+toUSD(i.principal,i.currency),0);
+  const ngTotal=ngInv.reduce((s,i)=>s+toNGN(effVal(i),i.currency),0);
+  const ukTotal=ukInv.reduce((s,i)=>s+toGBP(effVal(i),i.currency),0);
+  const usTotal=usInv.reduce((s,i)=>s+toUSD(effVal(i),i.currency),0);
+  const totalRet=prinNGN>0?((totalNGN-prinNGN)/prinNGN)*100:0;
+
+  const maturities=investments
+    .filter(i=>i.maturityDate)
+    .map(i=>({...i,days:daysLeft(i.maturityDate)}))
+    .filter(i=>i.days!==null&&i.days>=0)
+    .sort((a,b)=>a.days-b.days);
+
+  const typeBreakdown=TYPES.map(t=>({
+    ...t,total:investments.filter(i=>i.type===t.value).reduce((s,i)=>s+toNGN(effVal(i),i.currency),0)
+  })).filter(t=>t.total>0);
+
+  const filtered=cf==="ALL"?investments:investments.filter(i=>i.country===cf);
+
+  function setF(k,v){setForm(f=>({...f,[k]:v}));}
+  function openAdd(){setEditTarget(null);setForm(BLANK);setModal(true);}
+  function openEdit(i){setEditTarget(i);setForm({...i});setModal(true);}
+
+  function save(){
+    if(!form.name.trim()){notify("Please enter a name","err");return;}
+    const inv={...form,principal:+form.principal||0,currentValue:+form.currentValue||0,interestRate:+form.interestRate||0};
+    if(editTarget){setInvestments(p=>p.map(i=>i.id===editTarget.id?{...inv,id:editTarget.id}:i));notify("Updated ✓");}
+    else{setInvestments(p=>[...p,{...inv,id:Date.now()}]);notify("Added ✓");}
+    setModal(false);
+  }
+
+  function del(id){if(!window.confirm("Delete this investment?"))return;setInvestments(p=>p.filter(i=>i.id!==id));notify("Deleted","err");}
+
+  const exportJSON=JSON.stringify(investments,null,2);
+  function doImport(){
+    try{const d=JSON.parse(importTxt);if(!Array.isArray(d))throw 0;setInvestments(d);setShowImport(false);setImportTxt("");notify(`Imported ${d.length} ✓`);}
+    catch{notify("Invalid JSON — check format","err");}
+  }
+
+  function copyToClipboard(){
+    if(navigator.clipboard){navigator.clipboard.writeText(exportJSON).then(()=>{notify("Copied ✓");setShowExport(false);});}
+    else{const el=document.createElement("textarea");el.value=exportJSON;document.body.appendChild(el);el.select();document.execCommand("copy");document.body.removeChild(el);notify("Copied ✓");setShowExport(false);}
+  }
+
+  const isAutoType=AUTO_TYPES.includes(form.type);
+  const formAutoVal=form.autoCalc&&isAutoType&&form.principal&&form.interestRate&&form.startDate
+    ?computeAuto({...form,principal:+form.principal,interestRate:+form.interestRate,autoCalc:true}):null;
+
+  const countryData=[
+    {...COUNTRIES[0],total:ngTotal,prin:ngInv.reduce((s,i)=>s+toNGN(i.principal,i.currency),0),count:ngInv.length,dispCurr:"NGN",equiv:`${fmt(toUSD(ngTotal,"NGN"),"USD")} equiv`},
+    {...COUNTRIES[1],total:ukTotal,prin:ukInv.reduce((s,i)=>s+toGBP(i.principal,i.currency),0),count:ukInv.length,dispCurr:"GBP",equiv:`${fmt(toNGN(ukTotal,"GBP"),"NGN")} equiv`},
+    {...COUNTRIES[2],total:usTotal,prin:usInv.reduce((s,i)=>s+toUSD(i.principal,i.currency),0),count:usInv.length,dispCurr:"USD",equiv:`${fmt(toNGN(usTotal,"USD"),"NGN")} equiv`},
+  ];
+
+  const TABS=[{key:"dashboard",icon:"◈",label:"Home"},{key:"portfolio",icon:"⊞",label:"Portfolio"},{key:"calendar",icon:"◷",label:"Maturity"},{key:"returns",icon:"↑",label:"Returns"}];
+
+  return(
+    <div style={S.root}>
+      {/* HEADER */}
+      <header style={S.header}>
+        <div style={S.hL}>
+          <span style={{fontSize:20,color:"#facc15"}}>◈</span>
+          <span style={S.logo}>VAULTWISE</span>
+        </div>
+        <div style={S.hR}>
+          {!mob&&<>
+            <Pill l="₦/£" v={FX.NGN_GBP.toLocaleString()}/>
+            <Pill l="₦/$" v={FX.NGN_USD.toLocaleString()}/>
+          </>}
+          <Ico onClick={()=>setShowExport(true)} title="Export">⬆</Ico>
+          <Ico onClick={()=>setShowImport(true)} title="Import">⬇</Ico>
+          <button style={S.addBtn} onClick={openAdd}>{mob?"＋":"＋ Add"}</button>
+        </div>
+      </header>
+
+      {/* DESKTOP NAV */}
+      {!mob&&(
+        <nav style={S.dNav}>
+          {TABS.map(t=><button key={t.key} className="nav-btn" style={{...S.dNavBtn,...(tab===t.key?S.dNavAct:{})}} onClick={()=>setTab(t.key)}>{t.icon} {t.label}</button>)}
+        </nav>
+      )}
+
+      {/* MAIN */}
+      <main style={{...S.main,paddingBottom:mob?88:40}}>
+
+        {/* ── DASHBOARD ── */}
+        {tab==="dashboard"&&(
+          <div className="fadeUp">
+            {mob&&(
+              <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+                <Pill l="₦/£" v={FX.NGN_GBP.toLocaleString()}/><Pill l="₦/$" v={FX.NGN_USD.toLocaleString()}/>
+              </div>
+            )}
+
+            {/* Total strip */}
+            <div style={S.strip}>
+              <div>
+                <div style={S.stripLbl}>Total Portfolio</div>
+                <div style={S.stripVal}>{fmt(totalNGN,"NGN")}</div>
+                <div style={S.stripSub}>{fmt(totalUSD,"USD")} · {investments.length} positions</div>
+              </div>
+              <div style={{textAlign:"right"}}>
+                <div style={{color:"#4ade80",fontSize:22,fontWeight:700,fontFamily:"'Space Mono',monospace"}}>+{totalRet.toFixed(1)}%</div>
+                <div style={S.stripSub}>all-time return</div>
+              </div>
+            </div>
+
+            {/* Country carousel */}
+            <div style={{color:"#444",fontSize:10,textTransform:"uppercase",letterSpacing:"0.12em",marginBottom:8,paddingLeft:2}}>Markets</div>
+            <div className="carousel" style={S.carousel}>
+              {countryData.map(c=>{
+                const ret=c.prin>0?((c.total-c.prin)/c.prin)*100:0;
+                return(
+                  <div key={c.value} className="country-card" style={{...S.cCard,borderTop:`3px solid ${c.accent}`}}
+                    onClick={()=>{setTab("portfolio");setCf(c.value);}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10}}>
+                      <span style={{fontSize:22}}>{c.flag}</span>
+                      <span style={{fontSize:11,fontWeight:700,borderRadius:100,padding:"2px 8px",color:c.accent,background:`${c.accent}18`,border:`1px solid ${c.accent}40`}}>{ret>=0?"+":""}{ret.toFixed(1)}%</span>
+                    </div>
+                    <div style={{color:"#888",fontSize:11,marginBottom:4}}>{c.label}</div>
+                    <div style={{color:c.accent,fontSize:19,fontWeight:700,fontFamily:"'Space Mono',monospace",lineHeight:1.1,marginBottom:3}}>{fmt(c.total,c.dispCurr)}</div>
+                    <div style={{color:"#555",fontSize:10,marginBottom:10}}>{c.equiv}</div>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                      <span style={{color:"#555",fontSize:10}}>{c.count} position{c.count!==1?"s":""}</span>
+                      <span style={{color:"#444",fontSize:13}}>→</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Allocation */}
+            <Card>
+              <Ttl>Allocation</Ttl>
+              {typeBreakdown.map(t=>{
+                const pct=(t.total/totalNGN)*100;
+                return(
+                  <div key={t.value} style={{marginBottom:10}}>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+                      <span style={{color:"#aaa",fontSize:12}}>{t.icon} {t.label}</span>
+                      <span style={{color:TC[t.value],fontSize:12,fontFamily:"'Space Mono',monospace",fontWeight:700}}>{pct.toFixed(1)}%</span>
+                    </div>
+                    <div style={S.barBg}><div style={{...S.barFill,width:`${pct}%`,background:TC[t.value]}}/></div>
+                  </div>
+                );
+              })}
+            </Card>
+
+            {/* Maturities */}
+            {maturities.length>0&&(
+              <Card>
+                <Ttl>Upcoming Maturities</Ttl>
+                {maturities.slice(0,3).map(i=><MatRow key={i.id} inv={i}/>)}
+                {maturities.length>3&&<button style={S.lnk} onClick={()=>setTab("calendar")}>+{maturities.length-3} more →</button>}
+              </Card>
+            )}
+
+            {/* Recent positions */}
+            <Card>
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                <Ttl>Recent Positions</Ttl>
+                <button style={S.lnk} onClick={()=>setTab("portfolio")}>View all →</button>
+              </div>
+              {[...investments].slice(-5).reverse().map(i=><InvRow key={i.id} inv={i} onEdit={openEdit} onDel={del}/>)}
+            </Card>
+          </div>
+        )}
+
+        {/* ── PORTFOLIO ── */}
+        {tab==="portfolio"&&(
+          <div className="fadeUp">
+            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+              {["ALL","NG","UK","US"].map(c=>(
+                <button key={c} style={{...S.fBtn,...(cf===c?S.fBtnA:{})}} onClick={()=>setCf(c)}>
+                  {c==="ALL"?"All Markets":c==="NG"?"🇳🇬 Nigeria":c==="UK"?"🇬🇧 UK":"🇺🇸 US"}
+                </button>
+              ))}
+            </div>
+            {filtered.length===0&&<div style={S.empty}>No investments. <button style={S.lnk} onClick={openAdd}>Add one →</button></div>}
+            {filtered.map(i=><InvCard key={i.id} inv={i} onEdit={openEdit} onDel={del}/>)}
+          </div>
+        )}
+
+        {/* ── CALENDAR ── */}
+        {tab==="calendar"&&(
+          <div className="fadeUp">
+            <Card>
+              <Ttl>Maturity Calendar</Ttl>
+              {maturities.length===0
+                ?<div style={S.empty}>No fixed-term investments with maturity dates set.</div>
+                :maturities.map(inv=>{
+                  const col=inv.days<14?"#ef4444":inv.days<30?"#fb923c":inv.days<90?"#facc15":"#4ade80";
+                  return(
+                    <div key={inv.id} style={{background:"#0f0f1a",border:"1px solid #1a1a2e",borderLeft:`4px solid ${col}`,borderRadius:10,padding:"13px 14px",marginBottom:10,display:"flex",flexWrap:"wrap",justifyContent:"space-between",alignItems:"center",gap:10}}>
+                      <div style={{display:"flex",alignItems:"center",gap:10,flex:1}}>
+                        <span style={{fontSize:20}}>{TYPES.find(t=>t.value===inv.type)?.icon}</span>
+                        <div>
+                          <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{inv.name}</div>
+                          <div style={{color:"#777",fontSize:11}}>{inv.platform} · {COUNTRIES.find(c=>c.value===inv.country)?.flag} · {inv.maturityDate}</div>
+                        </div>
+                      </div>
+                      <div style={{display:"flex",gap:20,alignItems:"center"}}>
+                        <Mi label="Days Left" val={`${inv.days}d`} color={col}/>
+                        <Mi label="Value" val={fmt(effVal(inv),inv.currency)}/>
+                        {inv.interestRate>0&&<Mi label="Rate" val={`${inv.interestRate}%`} color="#4ade80"/>}
+                      </div>
+                    </div>
+                  );
+                })
+              }
+            </Card>
+          </div>
+        )}
+
+        {/* ── RETURNS ── */}
+        {tab==="returns"&&(
+          <div className="fadeUp">
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+              <KPI label="Total Gain (NGN)" val={`+${fmt(totalNGN-prinNGN,"NGN")}`} sub="auto + manual" accent="#4ade80"/>
+              <KPI label="Blended Return"   val={`+${totalRet.toFixed(2)}%`}         sub="all assets"   accent="#facc15"/>
+              <KPI label="Total Gain (USD)" val={`+${fmt(totalUSD-prinUSD,"USD")}`}  sub="equivalent"   accent="#60a5fa"/>
+              <KPI label="Positions"        val={investments.length}                  sub={`${ngInv.length} NG · ${ukInv.length} UK · ${usInv.length} US`} accent="#a78bfa"/>
+            </div>
+            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
+              <span style={bdg("#facc15")}>⚡ Auto-computed interest</span>
+              <span style={bdg("#888")}>✏️ Manual / market price</span>
+            </div>
+            <Card>
+              <Ttl>Return by Investment</Ttl>
+              {[...investments].sort((a,b)=>calcRet(b)-calcRet(a)).map(inv=>{
+                const ret=calcRet(inv),gain=effVal(inv)-inv.principal;
+                const isAuto=inv.autoCalc&&AUTO_TYPES.includes(inv.type);
+                const flag=COUNTRIES.find(c=>c.value===inv.country)?.flag||"";
+                return(
+                  <div key={inv.id} style={{marginBottom:14}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:5}}>
+                      <div style={{display:"flex",alignItems:"center",gap:8,flex:1,minWidth:0}}>
+                        <span>{TYPES.find(t=>t.value===inv.type)?.icon}</span>
+                        <div style={{minWidth:0}}>
+                          <div style={{color:"#fff",fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{inv.name}</div>
+                          <div style={{color:"#666",fontSize:11}}>{flag} {inv.platform} · {isAuto?"⚡":"✏️"}</div>
+                        </div>
+                      </div>
+                      <div style={{textAlign:"right",flexShrink:0,marginLeft:8}}>
+                        <div style={{color:ret>=0?"#4ade80":"#ef4444",fontWeight:700,fontFamily:"'Space Mono',monospace",fontSize:13}}>{ret>=0?"+":""}{ret.toFixed(1)}%</div>
+                        <div style={{color:"#777",fontSize:11}}>{gain>=0?"+":""}{fmt(gain,inv.currency)}</div>
+                      </div>
+                    </div>
+                    <div style={S.barBg}><div style={{...S.barFill,width:`${Math.min(Math.abs(ret)*2,100)}%`,background:TC[inv.type]||"#555"}}/></div>
+                  </div>
+                );
+              })}
+            </Card>
+          </div>
+        )}
+      </main>
+
+      {/* MOBILE BOTTOM NAV */}
+      {mob&&(
+        <nav style={S.bNav}>
+          {TABS.map(t=>(
+            <button key={t.key} style={{...S.bBtn,...(tab===t.key?{color:"#facc15"}:{})}} onClick={()=>setTab(t.key)}>
+              <span style={{fontSize:19}}>{t.icon}</span>
+              <span style={{fontSize:10,marginTop:2}}>{t.label}</span>
+            </button>
+          ))}
+        </nav>
+      )}
+
+      {/* ADD/EDIT MODAL */}
+      {modal&&(
+        <div style={S.overlay} onClick={()=>setModal(false)}>
+          <div style={{...S.sheet,width:mob?"100%":560,borderRadius:mob?"20px 20px 0 0":16,bottom:mob?0:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:18}}>
+              <h2 style={{fontFamily:"'Space Mono',monospace",fontSize:15,fontWeight:700,color:"#facc15",margin:0}}>{editTarget?"Edit Investment":"New Investment"}</h2>
+              <button style={S.xBtn} onClick={()=>setModal(false)}>✕</button>
+            </div>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+              <div style={{gridColumn:"1/-1"}}>
+                <Lbl>Investment Name</Lbl>
+                <Inp val={form.name} onChange={v=>setF("name",v)} ph="e.g. Zenith FD January"/>
+              </div>
+              <div>
+                <Lbl>Type</Lbl>
+                <Slct val={form.type} onChange={v=>{setForm(f=>({...f,type:v,autoCalc:AUTO_TYPES.includes(v)?f.autoCalc:false}));}} opts={TYPES.map(t=>({v:t.value,l:`${t.icon} ${t.label}`}))}/>
+              </div>
+              <div>
+                <Lbl>Country</Lbl>
+                <Slct val={form.country} onChange={v=>{const cc=COUNTRIES.find(c=>c.value===v);setForm(f=>({...f,country:v,currency:cc?.currency||"USD"}));}} opts={COUNTRIES.map(c=>({v:c.value,l:`${c.flag} ${c.label}`}))}/>
+              </div>
+              <div>
+                <Lbl>Currency</Lbl>
+                <Slct val={form.currency} onChange={v=>setF("currency",v)} opts={[{v:"NGN",l:"₦ NGN"},{v:"GBP",l:"£ GBP"},{v:"USD",l:"$ USD"}]}/>
+              </div>
+              <div>
+                <Lbl>Platform / Broker</Lbl>
+                <PlatField value={form.platform} country={form.country} platforms={allPlatforms(form.country)} onChange={v=>setF("platform",v)}/>
+              </div>
+              <div>
+                <Lbl>Principal ({CURR[form.currency]})</Lbl>
+                <Inp type="number" val={form.principal} onChange={v=>setF("principal",v)} ph="0.00"/>
+              </div>
+              <div>
+                <Lbl>Rate % p.a.</Lbl>
+                <Inp type="number" val={form.interestRate} onChange={v=>setF("interestRate",v)} ph="0"/>
+              </div>
+              <div>
+                <Lbl>Start Date</Lbl>
+                <Inp type="date" val={form.startDate} onChange={v=>setF("startDate",v)}/>
+              </div>
+              <div>
+                <Lbl>Maturity Date (optional)</Lbl>
+                <Inp type="date" val={form.maturityDate} onChange={v=>setF("maturityDate",v)}/>
+              </div>
+
+              {/* Auto toggle */}
+              {isAutoType&&(
+                <div style={{gridColumn:"1/-1"}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",background:"rgba(255,255,255,0.04)",borderRadius:10,padding:"12px 14px",marginBottom:8}}>
+                    <div style={{flex:1}}>
+                      <div style={{color:"#ddd",fontSize:13,fontWeight:600}}>Auto-compute interest ⚡</div>
+                      <div style={{color:"#666",fontSize:11,marginTop:2}}>Calculates daily from principal × rate × days / 365</div>
+                    </div>
+                    <div style={{width:38,height:22,borderRadius:100,background:form.autoCalc?"#4ade80":"#333",position:"relative",cursor:"pointer",flexShrink:0,transition:"background .2s"}} onClick={()=>setF("autoCalc",!form.autoCalc)}>
+                      <div style={{position:"absolute",top:3,left:3,width:16,height:16,borderRadius:"50%",background:"#fff",transition:"transform .2s",transform:form.autoCalc?"translateX(16px)":"none"}}/>
+                    </div>
+                  </div>
+                  {form.autoCalc&&AUTO_DESC[form.type]&&(
+                    <div style={{background:"rgba(250,204,21,0.06)",border:"1px solid rgba(250,204,21,0.18)",borderRadius:10,padding:"12px 14px",marginBottom:8}}>
+                      <div style={{color:"#facc15",fontSize:11,fontWeight:700,marginBottom:4}}>⚡ How this works for {TYPES.find(t=>t.value===form.type)?.label}</div>
+                      <div style={{color:"#bbb",fontSize:12,lineHeight:1.5}}>{AUTO_DESC[form.type]}</div>
+                      <div style={{color:"#666",fontSize:11,marginTop:6}}>Formula: Principal × Rate × Days elapsed ÷ 365</div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Manual value */}
+              {(!form.autoCalc||!isAutoType)&&(
+                <div style={{gridColumn:"1/-1"}}>
+                  <Lbl>Current Value ({CURR[form.currency]})</Lbl>
+                  <Inp type="number" val={form.currentValue} onChange={v=>setF("currentValue",v)} ph="0.00"/>
+                </div>
+              )}
+
+              <div style={{gridColumn:"1/-1"}}>
+                <Lbl>Notes</Lbl>
+                <textarea style={{...S.inp,resize:"vertical"}} rows={2} value={form.notes} onChange={e=>setF("notes",e.target.value)} placeholder="Optional…"/>
+              </div>
+            </div>
+
+            {/* Auto preview */}
+            {formAutoVal!==null&&(
+              <div style={{background:"rgba(74,222,128,0.06)",border:"1px solid rgba(74,222,128,0.2)",borderRadius:10,padding:"14px",marginTop:12,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div>
+                  <div style={{color:"#facc15",fontSize:11,marginBottom:2}}>⚡ Auto-computed value today</div>
+                  <div style={{color:"#4ade80",fontSize:20,fontWeight:700,fontFamily:"'Space Mono',monospace"}}>{fmt(formAutoVal,form.currency)}</div>
+                  <div style={{color:"#666",fontSize:11,marginTop:2}}>{daysSince(form.startDate)} days elapsed · +{fmt(formAutoVal-(+form.principal),form.currency)} earned</div>
+                </div>
+                <div style={{textAlign:"right"}}>
+                  <div style={{color:"#4ade80",fontSize:16,fontWeight:700}}>+{(((formAutoVal-(+form.principal))/(+form.principal))*100).toFixed(2)}%</div>
+                  <div style={{color:"#666",fontSize:10}}>return so far</div>
+                </div>
+              </div>
+            )}
+
+            <div style={{display:"flex",gap:10,marginTop:16}}>
+              <button style={S.cancelBtn} onClick={()=>setModal(false)}>Cancel</button>
+              <button style={{...S.addBtn,flex:1,padding:"11px",fontSize:14}} onClick={save}>{editTarget?"Save Changes":"Add Investment"}</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* EXPORT */}
+      {showExport&&(
+        <div style={S.overlay} onClick={()=>setShowExport(false)}>
+          <div style={{...S.sheet,width:mob?"100%":520,borderRadius:mob?"20px 20px 0 0":16,bottom:mob?0:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
+              <h2 style={{fontFamily:"'Space Mono',monospace",fontSize:15,fontWeight:700,color:"#facc15",margin:0}}>Export Data</h2>
+              <button style={S.xBtn} onClick={()=>setShowExport(false)}>✕</button>
+            </div>
+            <p style={{color:"#888",fontSize:13,marginBottom:12,lineHeight:1.5}}>
+              Your data is already saved automatically on this device. Use this to back it up or move it to another device.
+            </p>
+            <textarea style={{...S.inp,fontFamily:"'Space Mono',monospace",fontSize:11,height:160,resize:"none"}} readOnly value={exportJSON}/>
+            <button style={{...S.addBtn,width:"100%",marginTop:12,padding:11,fontSize:14}} onClick={copyToClipboard}>Copy to Clipboard</button>
+          </div>
+        </div>
+      )}
+
+      {/* IMPORT */}
+      {showImport&&(
+        <div style={S.overlay} onClick={()=>setShowImport(false)}>
+          <div style={{...S.sheet,width:mob?"100%":520,borderRadius:mob?"20px 20px 0 0":16,bottom:mob?0:"auto"}} onClick={e=>e.stopPropagation()}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:14}}>
+              <h2 style={{fontFamily:"'Space Mono',monospace",fontSize:15,fontWeight:700,color:"#facc15",margin:0}}>Import Data</h2>
+              <button style={S.xBtn} onClick={()=>setShowImport(false)}>✕</button>
+            </div>
+            <p style={{color:"#888",fontSize:13,marginBottom:12,lineHeight:1.5}}>Paste previously exported JSON. ⚠️ This replaces all current data.</p>
+            <textarea style={{...S.inp,fontFamily:"'Space Mono',monospace",fontSize:11,height:160,resize:"none"}} value={importTxt} onChange={e=>setImportTxt(e.target.value)} placeholder='[{"id":1,"name":"…"}]'/>
+            <div style={{display:"flex",gap:10,marginTop:12}}>
+              <button style={S.cancelBtn} onClick={()=>setShowImport(false)}>Cancel</button>
+              <button style={{...S.addBtn,flex:1,padding:11}} onClick={doImport}>Import</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST */}
+      {toast&&<div style={{position:"fixed",bottom:90,right:14,border:"1px solid",color:"#fff",borderRadius:10,padding:"10px 16px",fontSize:13,zIndex:999,fontWeight:500,animation:"toastIn .3s ease",background:toast.type==="err"?"#450a0a":"#052e16",borderColor:toast.type==="err"?"#ef4444":"#4ade80"}}>{toast.msg}</div>}
+    </div>
+  );
+}
+
+/* ── Platform field ── */
+function PlatField({value,platforms,onChange}){
+  const [open,setOpen]=useState(false);
+  const [q,setQ]=useState(value||"");
+  const ref=useRef(null);
+  useEffect(()=>setQ(value||""),[value]);
+  useEffect(()=>{const fn=e=>{if(ref.current&&!ref.current.contains(e.target))setOpen(false)};document.addEventListener("mousedown",fn);return()=>document.removeEventListener("mousedown",fn)},[]);
+  const filtered=platforms.filter(p=>p.toLowerCase().includes(q.toLowerCase()));
+  return(
+    <div ref={ref} style={{position:"relative"}}>
+      <input style={S.inp} value={q} placeholder="Type or select…"
+        onChange={e=>{setQ(e.target.value);onChange(e.target.value);setOpen(true);}}
+        onFocus={()=>setOpen(true)}/>
+      {open&&filtered.length>0&&(
+        <div style={{position:"absolute",top:"calc(100% + 4px)",left:0,right:0,background:"#0f0f1a",border:"1px solid #2a2a4e",borderRadius:10,zIndex:300,maxHeight:200,overflowY:"auto",boxShadow:"0 8px 24px rgba(0,0,0,.6)"}}>
+          {filtered.slice(0,10).map(p=>(
+            <div key={p} className="dd-item" style={{padding:"9px 14px",cursor:"pointer",fontSize:13,color:"#ccc",borderRadius:6,margin:"2px 4px"}}
+              onMouseDown={()=>{onChange(p);setQ(p);setOpen(false);}}>
+              {p}
+            </div>
+          ))}
+          {q&&!platforms.includes(q)&&(
+            <div className="dd-item" style={{padding:"9px 14px",cursor:"pointer",fontSize:13,color:"#facc15",borderTop:"1px solid #222",borderRadius:6,margin:"2px 4px"}}
+              onMouseDown={()=>{onChange(q);setOpen(false);}}>
+              ＋ Add "{q}"
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Sub-components ── */
+function InvCard({inv,onEdit,onDel}){
+  const cv=effVal(inv),ret=calcRet(inv),days=daysLeft(inv.maturityDate);
+  const info=TYPES.find(t=>t.value===inv.type);
+  const flag=COUNTRIES.find(c=>c.value===inv.country)?.flag||"";
+  const isAuto=inv.autoCalc&&AUTO_TYPES.includes(inv.type);
+  return(
+    <div style={{background:"#0f0f1a",border:"1px solid #1a1a2e",borderLeft:`3px solid ${TC[inv.type]||"#555"}`,borderRadius:12,padding:16,marginBottom:10}}>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:12}}>
+        <div>
+          <div style={{fontSize:20,marginBottom:3}}>{info?.icon}</div>
+          <div style={{color:"#fff",fontWeight:700,fontSize:14}}>{inv.name}</div>
+          <div style={{color:"#666",fontSize:11}}>{flag} {inv.platform}{isAuto?<span style={{color:"#facc15"}}> ⚡</span>:""}</div>
+        </div>
+        <div style={{display:"flex",gap:6}}>
+          <button style={S.iBtn} onClick={()=>onEdit(inv)}>✏️</button>
+          <button style={S.iBtn} onClick={()=>onDel(inv.id)}>🗑️</button>
+        </div>
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+        <Chip l="Value"     v={fmt(cv,inv.currency)}/>
+        <Chip l="Principal" v={fmt(inv.principal,inv.currency)}/>
+        <Chip l="Return"    v={`${ret>=0?"+":""}${ret.toFixed(1)}%`} color={ret>=0?"#4ade80":"#ef4444"}/>
+        {inv.interestRate>0&&<Chip l="Rate p.a." v={`${inv.interestRate}%`}/>}
+        {days!==null&&<Chip l="Days Left" v={`${days}d`} color={days<30?"#fb923c":"#facc15"}/>}
+        {inv.notes&&<Chip l="Notes" v={inv.notes}/>}
+      </div>
+    </div>
+  );
+}
+
+function InvRow({inv,onEdit,onDel}){
+  const cv=effVal(inv),ret=calcRet(inv);
+  const info=TYPES.find(t=>t.value===inv.type);
+  const flag=COUNTRIES.find(c=>c.value===inv.country)?.flag||"";
+  return(
+    <div style={{display:"flex",alignItems:"center",padding:"9px 0",borderBottom:"1px solid #111"}}>
+      <span style={{fontSize:17,marginRight:10,flexShrink:0}}>{info?.icon}</span>
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{color:"#fff",fontSize:13,fontWeight:600,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{inv.name}</div>
+        <div style={{color:"#666",fontSize:11}}>{flag} {inv.platform}</div>
+      </div>
+      <div style={{textAlign:"right",marginRight:8}}>
+        <div style={{color:"#fff",fontSize:13,fontFamily:"'Space Mono',monospace"}}>{fmt(cv,inv.currency)}</div>
+        <div style={{color:ret>=0?"#4ade80":"#ef4444",fontSize:11}}>{ret>=0?"+":""}{ret.toFixed(1)}%</div>
+      </div>
+      <div style={{display:"flex",gap:4,flexShrink:0}}>
+        <button style={S.iBtn} onClick={()=>onEdit(inv)}>✏️</button>
+        <button style={S.iBtn} onClick={()=>onDel(inv.id)}>🗑️</button>
+      </div>
+    </div>
+  );
+}
+
+function MatRow({inv}){
+  const col=inv.days<14?"#ef4444":inv.days<30?"#fb923c":inv.days<90?"#facc15":"#4ade80";
+  return(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 0",borderBottom:"1px solid #111"}}>
+      <div>
+        <div style={{color:"#fff",fontSize:13}}>{inv.name}</div>
+        <div style={{color:"#666",fontSize:11}}>{COUNTRIES.find(c=>c.value===inv.country)?.flag} {inv.maturityDate}</div>
+      </div>
+      <div style={{textAlign:"right"}}>
+        <div style={{color:col,fontWeight:700,fontSize:13}}>{inv.days}d</div>
+        <div style={{color:"#888",fontSize:11}}>{fmt(effVal(inv),inv.currency)}</div>
+      </div>
+    </div>
+  );
+}
+
+function KPI({label,val,sub,accent}){
+  return(
+    <div style={{background:"#0f0f1a",border:"1px solid #1a1a2e",borderTop:`3px solid ${accent}`,borderRadius:12,padding:"14px"}}>
+      <div style={{color:"#777",fontSize:10,textTransform:"uppercase",letterSpacing:"0.07em",marginBottom:5}}>{label}</div>
+      <div style={{color:"#fff",fontSize:19,fontWeight:700,fontFamily:"'Space Mono',monospace",letterSpacing:"-0.02em",lineHeight:1.2}}>{val}</div>
+      <div style={{color:"#555",fontSize:11,marginTop:3}}>{sub}</div>
+    </div>
+  );
+}
+
+function Chip({l,v,color}){
+  return(
+    <div style={{background:"rgba(255,255,255,.04)",borderRadius:8,padding:"7px 9px"}}>
+      <div style={{color:"#555",fontSize:9,textTransform:"uppercase",letterSpacing:"0.05em",marginBottom:2}}>{l}</div>
+      <div style={{color:color||"#ddd",fontWeight:600,fontSize:12,fontFamily:"'Space Mono',monospace",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{v}</div>
+    </div>
+  );
+}
+
+function Mi({label,val,color}){
+  return(
+    <div style={{textAlign:"center"}}>
+      <div style={{color:color||"#fff",fontSize:14,fontWeight:700,fontFamily:"'Space Mono',monospace"}}>{val}</div>
+      <div style={{color:"#666",fontSize:10}}>{label}</div>
+    </div>
+  );
+}
+
+function Card({children}){return<div style={S.card}>{children}</div>;}
+function Ttl({children}){return<div style={S.ttl}>{children}</div>;}
+function Pill({l,v}){return<div style={S.pill}><span style={{color:"#666",fontSize:11}}>{l}</span><span style={{color:"#facc15",fontSize:12,fontFamily:"'Space Mono',monospace"}}>{v}</span></div>;}
+function Ico({children,onClick,title}){return<button style={S.ico} onClick={onClick} title={title}>{children}</button>;}
+function Lbl({children}){return<label style={S.lbl}>{children}</label>;}
+function Inp({val,onChange,ph,type="text"}){return<input style={S.inp} type={type} value={val} onChange={e=>onChange(e.target.value)} placeholder={ph}/>;}
+function Slct({val,onChange,opts}){return<select style={S.inp} value={val} onChange={e=>onChange(e.target.value)}>{opts.map(o=><option key={o.v} value={o.v}>{o.l}</option>)}</select>;}
+function bdg(color){return{background:`${color}15`,border:`1px solid ${color}40`,borderRadius:100,padding:"4px 10px",fontSize:11,color,display:"inline-flex",alignItems:"center",gap:4};}
+
+/* Styles */
+const S={
+  root:      {minHeight:"100vh",background:"#0a0a0f",color:"#fff",fontFamily:"'DM Sans',sans-serif"},
+  header:    {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 16px",borderBottom:"1px solid #1a1a2e",background:"rgba(10,10,15,.96)",backdropFilter:"blur(12px)",position:"sticky",top:0,zIndex:100},
+  hL:        {display:"flex",alignItems:"center",gap:8},
+  hR:        {display:"flex",alignItems:"center",gap:8},
+  logo:      {fontFamily:"'Space Mono',monospace",fontSize:15,fontWeight:700,letterSpacing:"0.08em"},
+  addBtn:    {background:"#facc15",color:"#000",border:"none",borderRadius:8,padding:"8px 14px",fontWeight:700,fontSize:13},
+  ico:       {background:"#1a1a2e",border:"1px solid #2a2a4e",color:"#aaa",borderRadius:8,padding:"6px 10px",fontSize:13,border:"none"},
+  pill:      {background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:100,padding:"4px 11px",display:"flex",gap:6,alignItems:"center"},
+  dNav:      {display:"flex",gap:4,padding:"10px 16px",borderBottom:"1px solid #111",background:"#080810"},
+  dNavBtn:   {background:"none",border:"none",color:"#555",fontSize:13,padding:"6px 14px",borderRadius:6,transition:"background .15s"},
+  dNavAct:   {background:"#1a1a2e",color:"#facc15",fontWeight:600},
+  bNav:      {position:"fixed",bottom:0,left:0,right:0,background:"#0a0a0f",borderTop:"1px solid #1a1a2e",display:"flex",zIndex:200,paddingBottom:"env(safe-area-inset-bottom,0px)"},
+  bBtn:      {flex:1,background:"none",border:"none",color:"#555",padding:"10px 4px",display:"flex",flexDirection:"column",alignItems:"center"},
+  main:      {padding:"14px",maxWidth:900,margin:"0 auto"},
+  strip:     {background:"#0f0f1a",border:"1px solid #1a1a2e",borderRadius:14,padding:"18px 20px",marginBottom:16,display:"flex",justifyContent:"space-between",alignItems:"center"},
+  stripLbl:  {color:"#666",fontSize:10,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:4},
+  stripVal:  {color:"#fff",fontSize:26,fontWeight:700,fontFamily:"'Space Mono',monospace",letterSpacing:"-0.02em"},
+  stripSub:  {color:"#555",fontSize:12,marginTop:3},
+  carousel:  {display:"flex",gap:10,overflowX:"auto",paddingBottom:8,marginBottom:14,scrollSnapType:"x mandatory",WebkitOverflowScrolling:"touch"},
+  cCard:     {minWidth:160,flex:"0 0 160px",background:"#0f0f1a",border:"1px solid #1a1a2e",borderRadius:14,padding:"14px 16px",cursor:"pointer",scrollSnapAlign:"start",userSelect:"none",transition:"border-color .15s"},
+  card:      {background:"#0f0f1a",border:"1px solid #1a1a2e",borderRadius:12,padding:"16px 14px",marginBottom:12},
+  ttl:       {color:"#666",fontSize:10,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:12},
+  barBg:     {background:"#1a1a2e",borderRadius:100,height:5,overflow:"hidden"},
+  barFill:   {height:"100%",borderRadius:100,transition:"width .6s ease"},
+  fBtn:      {background:"#111",border:"1px solid #222",color:"#666",borderRadius:8,padding:"7px 12px",fontSize:12},
+  fBtnA:     {background:"#1a1a2e",border:"1px solid #facc15",color:"#facc15"},
+  empty:     {color:"#555",textAlign:"center",padding:"40px 0",fontSize:14},
+  lnk:       {background:"none",border:"none",color:"#facc15",fontSize:12,textDecoration:"underline",padding:0,display:"inline"},
+  iBtn:      {background:"rgba(255,255,255,.06)",border:"none",borderRadius:6,padding:"5px 7px",fontSize:13},
+  overlay:   {position:"fixed",inset:0,background:"rgba(0,0,0,.87)",backdropFilter:"blur(5px)",display:"flex",alignItems:"flex-end",justifyContent:"center",zIndex:500},
+  sheet:     {background:"#0f0f1a",border:"1px solid #2a2a4e",padding:22,maxHeight:"92vh",overflowY:"auto"},
+  xBtn:      {background:"none",border:"none",color:"#666",fontSize:18,padding:0},
+  lbl:       {color:"#777",fontSize:10,textTransform:"uppercase",letterSpacing:"0.06em",display:"block",marginBottom:5},
+  inp:       {width:"100%",background:"#080810",border:"1px solid #222",borderRadius:8,padding:"10px 12px",color:"#fff",fontSize:14,outline:"none",boxSizing:"border-box"},
+  cancelBtn: {background:"none",border:"1px solid #333",color:"#777",borderRadius:8,padding:"11px 20px",fontSize:13},
+};
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+
+<!-- Service Worker for offline use -->
+<script>
+if('serviceWorker' in navigator){
+  const sw = `
+    const CACHE = 'vaultwise-v1';
+    const ASSETS = ['./', 'https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap'];
+    self.addEventListener('install', e => e.waitUntil(caches.open(CACHE).then(c => c.addAll(ASSETS).catch(()=>{}))));
+    self.addEventListener('fetch', e => e.respondWith(fetch(e.request).catch(() => caches.match(e.request))));
+  `;
+  const blob = new Blob([sw], {type:'text/javascript'});
+  navigator.serviceWorker.register(URL.createObjectURL(blob)).catch(()=>{});
+}
+</script>
+</body>
+</html>
