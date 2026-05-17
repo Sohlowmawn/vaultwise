@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, viewport-fit=cover"/>
 <meta name="theme-color" content="#0a0a0f"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
@@ -243,7 +243,7 @@ function App(){
       {/* HEADER */}
       <header style={S.header}>
         <div style={S.hL}>
-          <span style={{fontSize:20,color:"#facc15"}}>◈</span>
+          {!mob&&<span style={{fontSize:20,color:"#facc15"}}>◈</span>}
           <span style={S.logo}>VAULTWISE</span>
         </div>
         <div style={S.hR}>
@@ -752,7 +752,7 @@ function bdg(color){return{background:`${color}15`,border:`1px solid ${color}40`
 /* Styles */
 const S={
   root:      {minHeight:"100vh",background:"#0a0a0f",color:"#fff",fontFamily:"'DM Sans',sans-serif"},
-  header:    {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid #1a1a2e",background:"rgba(10,10,15,.96)",backdropFilter:"blur(12px)",position:"sticky",top:0,zIndex:100,minHeight:52},
+  header:    {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",paddingTop:"calc(env(safe-area-inset-top, 0px) + 10px)",borderBottom:"1px solid #1a1a2e",background:"rgba(10,10,15,.96)",backdropFilter:"blur(12px)",position:"sticky",top:0,zIndex:100,minHeight:52},
   hL:        {display:"flex",alignItems:"center",gap:6,flexShrink:0},
   hR:        {display:"flex",alignItems:"center",gap:6,flexShrink:0},
   logo:      {fontFamily:"'Space Mono',monospace",fontSize:13,fontWeight:700,letterSpacing:"0.06em",whiteSpace:"nowrap"},
