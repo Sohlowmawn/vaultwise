@@ -103,17 +103,13 @@ const PLATFORMS={
   US:["Chase","Bank of America","Wells Fargo","Ally Bank","Marcus","Fidelity","Vanguard","Schwab","Robinhood","Wealthfront","Betterment","E*TRADE"],
 };
 
-const SEED=[
-  {id:1,name:"GTBank Savings",      type:"savings",      country:"NG",currency:"NGN",principal:2500000,currentValue:2625000,interestRate:5,   platform:"GTBank",             startDate:"2024-01-15",maturityDate:"",        notes:"",autoCalc:true},
-  {id:2,name:"Access FD 90-Day",    type:"fixed_deposit",country:"NG",currency:"NGN",principal:5000000,currentValue:5312500,interestRate:25,  platform:"Access Bank",        startDate:"2024-11-01",maturityDate:"2025-11-01",notes:"Auto-renew",autoCalc:true},
-  {id:3,name:"Lendha P2P",          type:"p2p",          country:"NG",currency:"NGN",principal:1000000,currentValue:1085000,interestRate:34,  platform:"Lendha",             startDate:"2024-10-01",maturityDate:"2025-12-30",notes:"",autoCalc:true},
-  {id:4,name:"Dangote Cement NGX",  type:"equity",       country:"NG",currency:"NGN",principal:3000000,currentValue:3780000,interestRate:0,   platform:"Meristem",           startDate:"2024-03-10",maturityDate:"",        notes:"",autoCalc:false},
-  {id:5,name:"Barclays Easy Access",type:"savings",      country:"UK",currency:"GBP",principal:8000,   currentValue:8380,   interestRate:4.75,platform:"Barclays",           startDate:"2024-06-01",maturityDate:"",        notes:"",autoCalc:true},
-  {id:6,name:"HL ISA",              type:"isa",          country:"UK",currency:"GBP",principal:15000,  currentValue:16950,  interestRate:0,   platform:"Hargreaves Lansdown",startDate:"2024-04-06",maturityDate:"",        notes:"FTSE All-World ETF",autoCalc:false},
-  {id:7,name:"NS&I Premium Bonds",  type:"bonds",        country:"UK",currency:"GBP",principal:5000,   currentValue:5000,   interestRate:4.4, platform:"NS&I",               startDate:"2023-09-01",maturityDate:"",        notes:"",autoCalc:false},
-  {id:8,name:"Ally HYSA",           type:"savings",      country:"US",currency:"USD",principal:10000,  currentValue:10475,  interestRate:4.75,platform:"Ally Bank",          startDate:"2024-03-01",maturityDate:"",        notes:"High-yield savings",autoCalc:true},
-  {id:9,name:"Fidelity S&P 500 ETF",type:"etf",          country:"US",currency:"USD",principal:5000,   currentValue:6200,   interestRate:0,   platform:"Fidelity",           startDate:"2023-06-01",maturityDate:"",        notes:"FXAIX",autoCalc:false},
-];
+const SEED=[];
+const APP_VERSION="2.0";
+// Clear old cached data if version changed
+if(localStorage.getItem("vaultwise_version")!==APP_VERSION){
+  localStorage.removeItem(LS_KEY);
+  localStorage.setItem("vaultwise_version",APP_VERSION);
+}
 
 const BLANK={name:"",type:"savings",country:"NG",currency:"NGN",principal:"",currentValue:"",interestRate:"",platform:"",startDate:"",maturityDate:"",notes:"",autoCalc:true};
 const LS_KEY="vaultwise_v1";
@@ -280,7 +276,18 @@ function App(){
               </div>
             )}
 
-            {/* Total strip */}
+            {/* Empty state */}
+            {investments.length===0&&(
+              <div style={{textAlign:"center",padding:"40px 20px",background:"#0f0f1a",border:"1px solid #1a1a2e",borderRadius:14,marginBottom:14}}>
+                <div style={{fontSize:40,marginBottom:12}}>◈</div>
+                <div style={{color:"#fff",fontSize:16,fontWeight:700,marginBottom:8}}>Welcome to VaultWise</div>
+                <div style={{color:"#666",fontSize:13,lineHeight:1.6,marginBottom:20}}>Start tracking your investments across Nigeria, UK and US. Tap the button below to add your first one.</div>
+                <button style={{background:"#facc15",color:"#000",border:"none",borderRadius:10,padding:"12px 28px",fontWeight:700,fontSize:14,fontFamily:"'DM Sans',sans-serif"}} onClick={openAdd}>＋ Add First Investment</button>
+              </div>
+            )}
+
+            {/* Total strip + carousel — only when data exists */}
+            {investments.length>0&&(<>
             <div style={S.strip}>
               <div>
                 <div style={S.stripLbl}>Total Portfolio</div>
@@ -351,6 +358,7 @@ function App(){
               </div>
               {[...investments].slice(-5).reverse().map(i=><InvRow key={i.id} inv={i} onEdit={openEdit} onDel={del}/>)}
             </Card>
+            </>)}
           </div>
         )}
 
@@ -744,13 +752,13 @@ function bdg(color){return{background:`${color}15`,border:`1px solid ${color}40`
 /* Styles */
 const S={
   root:      {minHeight:"100vh",background:"#0a0a0f",color:"#fff",fontFamily:"'DM Sans',sans-serif"},
-  header:    {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"13px 16px",borderBottom:"1px solid #1a1a2e",background:"rgba(10,10,15,.96)",backdropFilter:"blur(12px)",position:"sticky",top:0,zIndex:100},
-  hL:        {display:"flex",alignItems:"center",gap:8},
-  hR:        {display:"flex",alignItems:"center",gap:8},
-  logo:      {fontFamily:"'Space Mono',monospace",fontSize:15,fontWeight:700,letterSpacing:"0.08em"},
-  addBtn:    {background:"#facc15",color:"#000",border:"none",borderRadius:8,padding:"8px 14px",fontWeight:700,fontSize:13},
-  ico:       {background:"#1a1a2e",border:"1px solid #2a2a4e",color:"#aaa",borderRadius:8,padding:"6px 10px",fontSize:13,border:"none"},
-  pill:      {background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:100,padding:"4px 11px",display:"flex",gap:6,alignItems:"center"},
+  header:    {display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 14px",borderBottom:"1px solid #1a1a2e",background:"rgba(10,10,15,.96)",backdropFilter:"blur(12px)",position:"sticky",top:0,zIndex:100,minHeight:52},
+  hL:        {display:"flex",alignItems:"center",gap:6,flexShrink:0},
+  hR:        {display:"flex",alignItems:"center",gap:6,flexShrink:0},
+  logo:      {fontFamily:"'Space Mono',monospace",fontSize:13,fontWeight:700,letterSpacing:"0.06em",whiteSpace:"nowrap"},
+  addBtn:    {background:"#facc15",color:"#000",border:"none",borderRadius:8,padding:"7px 13px",fontWeight:700,fontSize:13,whiteSpace:"nowrap"},
+  ico:       {background:"#1a1a2e",color:"#aaa",borderRadius:8,padding:"6px 9px",fontSize:13,border:"1px solid #2a2a4e",lineHeight:1},
+  pill:      {background:"#1a1a2e",border:"1px solid #2a2a4e",borderRadius:100,padding:"4px 10px",display:"flex",gap:5,alignItems:"center"},
   dNav:      {display:"flex",gap:4,padding:"10px 16px",borderBottom:"1px solid #111",background:"#080810"},
   dNavBtn:   {background:"none",border:"none",color:"#555",fontSize:13,padding:"6px 14px",borderRadius:6,transition:"background .15s"},
   dNavAct:   {background:"#1a1a2e",color:"#facc15",fontWeight:600},
