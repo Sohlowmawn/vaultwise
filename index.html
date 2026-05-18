@@ -162,6 +162,9 @@ function App(){
   const [toast,setToast]=useState(null);
   const w=useWidth();
   const mob=w<640;
+  const [dispCurr,setDispCurr]=useState(()=>localStorage.getItem("vaultwise_disp_curr")||"NGN");
+  useEffect(()=>{localStorage.setItem("vaultwise_disp_curr",dispCurr);},[dispCurr]);
+  const convertTo=useCallback((v,c)=>dispCurr==="NGN"?toNGN(v,c):dispCurr==="GBP"?toGBP(v,c):toUSD(v,c),[dispCurr]);
 
   /* Save to localStorage whenever investments change */
   useEffect(()=>{
@@ -188,6 +191,11 @@ function App(){
   const ukTotal=ukInv.reduce((s,i)=>s+toGBP(effVal(i),i.currency),0);
   const usTotal=usInv.reduce((s,i)=>s+toUSD(effVal(i),i.currency),0);
   const totalRet=prinNGN>0?((totalNGN-prinNGN)/prinNGN)*100:0;
+  /* Display-currency totals (update whenever investments or dispCurr change) */
+  const dispTotal=investments.reduce((s,i)=>s+convertTo(effVal(i),i.currency),0);
+  const dispPrin=investments.reduce((s,i)=>s+convertTo(i.principal,i.currency),0);
+  const dispReturns=dispTotal-dispPrin;
+  const dispRetPct=dispPrin>0?(dispReturns/dispPrin)*100:0;
 
   const maturities=investments
     .filter(i=>i.maturityDate)
@@ -288,15 +296,35 @@ function App(){
 
             {/* Total strip + carousel — only when data exists */}
             {investments.length>0&&(<>
-            <div style={S.strip}>
-              <div>
-                <div style={S.stripLbl}>Total Portfolio</div>
-                <div style={S.stripVal}>{fmt(totalNGN,"NGN")}</div>
-                <div style={S.stripSub}>{fmt(totalUSD,"USD")} · {investments.length} positions</div>
+            <div style={{...S.strip,flexDirection:"column",gap:12,alignItems:"stretch"}}>
+              {/* Header row: label + currency toggle */}
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                <div style={S.stripLbl}>Portfolio Overview</div>
+                <div style={{display:"flex",gap:3}}>
+                  {["NGN","GBP","USD"].map(c=>(
+                    <button key={c} onClick={()=>setDispCurr(c)} style={{background:dispCurr===c?"#facc15":"#1a1a2e",color:dispCurr===c?"#000":"#666",border:dispCurr===c?"none":"1px solid #2a2a4e",borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"background .15s"}}>
+                      {CURR[c]}{c}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div style={{textAlign:"right"}}>
-                <div style={{color:"#4ade80",fontSize:22,fontWeight:700,fontFamily:"'Space Mono',monospace"}}>+{totalRet.toFixed(1)}%</div>
-                <div style={S.stripSub}>all-time return</div>
+              {/* Three metrics */}
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
+                <div style={{background:"rgba(255,255,255,.05)",borderRadius:10,padding:"12px 10px"}}>
+                  <div style={{color:"#555",fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Invested</div>
+                  <div style={{color:"#ccc",fontSize:mob?13:15,fontWeight:700,fontFamily:"'Space Mono',monospace",letterSpacing:"-0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fmt(dispPrin,dispCurr)}</div>
+                  <div style={{color:"#444",fontSize:10,marginTop:3}}>principal</div>
+                </div>
+                <div style={{background:"rgba(74,222,128,.08)",border:"1px solid rgba(74,222,128,.22)",borderRadius:10,padding:"12px 10px"}}>
+                  <div style={{color:"#4ade80",fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Returns</div>
+                  <div style={{color:"#4ade80",fontSize:mob?13:15,fontWeight:700,fontFamily:"'Space Mono',monospace",letterSpacing:"-0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{dispReturns>=0?"+":"-"}{fmt(Math.abs(dispReturns),dispCurr)}</div>
+                  <div style={{color:"#4ade80",fontSize:10,marginTop:3,opacity:.75}}>{dispRetPct>=0?"+":""}{dispRetPct.toFixed(1)}%</div>
+                </div>
+                <div style={{background:"rgba(250,204,21,.07)",border:"1px solid rgba(250,204,21,.18)",borderRadius:10,padding:"12px 10px"}}>
+                  <div style={{color:"#facc15",fontSize:9,textTransform:"uppercase",letterSpacing:"0.1em",marginBottom:6}}>Total</div>
+                  <div style={{color:"#facc15",fontSize:mob?13:15,fontWeight:700,fontFamily:"'Space Mono',monospace",letterSpacing:"-0.02em",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{fmt(dispTotal,dispCurr)}</div>
+                  <div style={{color:"#555",fontSize:10,marginTop:3}}>{investments.length} position{investments.length!==1?"s":""}</div>
+                </div>
               </div>
             </div>
 
@@ -411,11 +439,18 @@ function App(){
         {/* ── RETURNS ── */}
         {tab==="returns"&&(
           <div className="fadeUp">
+            <div style={{display:"flex",justifyContent:"flex-end",marginBottom:10,gap:3}}>
+              {["NGN","GBP","USD"].map(c=>(
+                <button key={c} onClick={()=>setDispCurr(c)} style={{background:dispCurr===c?"#facc15":"#1a1a2e",color:dispCurr===c?"#000":"#666",border:dispCurr===c?"none":"1px solid #2a2a4e",borderRadius:6,padding:"3px 9px",fontSize:11,fontWeight:700,cursor:"pointer",fontFamily:"'DM Sans',sans-serif",transition:"background .15s"}}>
+                  {CURR[c]}{c}
+                </button>
+              ))}
+            </div>
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
-              <KPI label="Total Gain (NGN)" val={`+${fmt(totalNGN-prinNGN,"NGN")}`} sub="auto + manual" accent="#4ade80"/>
-              <KPI label="Blended Return"   val={`+${totalRet.toFixed(2)}%`}         sub="all assets"   accent="#facc15"/>
-              <KPI label="Total Gain (USD)" val={`+${fmt(totalUSD-prinUSD,"USD")}`}  sub="equivalent"   accent="#60a5fa"/>
-              <KPI label="Positions"        val={investments.length}                  sub={`${ngInv.length} NG · ${ukInv.length} UK · ${usInv.length} US`} accent="#a78bfa"/>
+              <KPI label={`Invested (${dispCurr})`} val={fmt(dispPrin,dispCurr)}                                                               sub="total principal"  accent="#60a5fa"/>
+              <KPI label="Blended Return"            val={`${dispRetPct>=0?"+":""}${dispRetPct.toFixed(2)}%`}                                   sub="all assets"       accent="#facc15"/>
+              <KPI label={`Returns (${dispCurr})`}  val={`${dispReturns>=0?"+":"-"}${fmt(Math.abs(dispReturns),dispCurr)}`}                    sub="profit earned"    accent="#4ade80"/>
+              <KPI label="Positions"                 val={investments.length}                                                                   sub={`${ngInv.length} NG · ${ukInv.length} UK · ${usInv.length} US`} accent="#a78bfa"/>
             </div>
             <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap"}}>
               <span style={bdg("#facc15")}>⚡ Auto-computed interest</span>
